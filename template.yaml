@@ -1,0 +1,371 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Template SAM para a solução OFP-Backend
+#######################################################################################################
+#
+#  Parameters
+#
+#######################################################################################################
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - stage
+      - prod
+  DatabaseName:
+    Type: String
+  DatabaseAdminUser:
+    Type: String
+  DatabaseAdminPassword:
+    Type: String
+    NoEcho: true
+  SolutionUser:
+    Type: String
+  SolutionUserPassword:
+    Type: String
+    NoEcho: true
+  DataBaseUtilsLayerVersion:
+    Type: Number
+  PandasLayerVersion:
+    Type: Number
+  SQLAlchemyLayerVersion:
+    Type: Number
+#######################################################################################################
+#
+#  Globals
+#
+#######################################################################################################
+Globals:
+  Function:
+    Runtime: python3.12
+    Handler: app.lambda_handler
+    MemorySize: 128
+    Timeout: 30
+Resources:
+#######################################################################################################
+#
+#  Resources / Integration
+#
+# #######################################################################################################
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Origins:
+          - DomainName: !Sub "${OFPAPI}.execute-api.${AWS::Region}.amazonaws.com"
+            Id: ApiGateway
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+        DefaultCacheBehavior:
+          TargetOriginId: ApiGateway
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: ['GET', 'HEAD', 'OPTIONS']
+          CachedMethods: ['GET', 'HEAD']
+          ForwardedValues:
+            QueryString: true
+            Cookies:
+              Forward: none
+          DefaultTTL: 0
+          MinTTL: 0
+          MaxTTL: 0
+          Compress: true
+        CacheBehaviors:
+          - PathPattern: "/dev/mvt/fpnd/*/*/*.pbf"  # Ajuste para o padrão correto
+            TargetOriginId: ApiGateway
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: ['GET', 'HEAD', 'OPTIONS']
+            CachedMethods: ['GET', 'HEAD']
+            ForwardedValues:
+              QueryString: true
+              Cookies:
+                Forward: none
+            DefaultTTL: 86400  # Um dia
+            MinTTL: 0
+            MaxTTL: 31536000  # Um ano
+        Comment: 'CloudFront Distribution for API Gateway'
+        PriceClass: PriceClass_100
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+#######################################################################################################
+#
+#  Resources / Lambda Functions
+#
+#######################################################################################################
+  BootstrapFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/bootstrap
+      Layers:
+        - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:DataBaseUtilsLayer:${DataBaseUtilsLayerVersion}"
+        - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:SQLAlchemyLayer:${SQLAlchemyLayerVersion}"
+      Policies:
+        - AmazonRDSDataFullAccess
+        - S3ReadPolicy:
+            BucketName: !Sub "${AWS::StackName}-${AWS::Region}-${AWS::AccountId}-conf"
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt RDSAurora.Endpoint.Address
+          DB_PORT: !GetAtt RDSAurora.Endpoint.Port       
+          DB_NAME: !Ref DatabaseName
+          DB_ADMIN_USER: !Ref DatabaseAdminUser
+          DB_ADMIN_PASSWORD: !Ref DatabaseAdminPassword
+          DB_SOLUTION_USER: !Ref SolutionUser
+          DB_SOLUTION_USER_PASSWORD: !Ref SolutionUserPassword
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref DatabaseSecurityGroup
+        SubnetIds:
+          - !Ref PublicSubnetA
+          - !Ref PublicSubnetB
+
+  OFPAPIFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/ofp_api
+      MemorySize: 256
+      Layers:
+        - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:DataBaseUtilsLayer:${DataBaseUtilsLayerVersion}"
+        - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:SQLAlchemyLayer:${SQLAlchemyLayerVersion}"
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt RDSAurora.Endpoint.Address
+          DB_PORT: !GetAtt RDSAurora.Endpoint.Port
+          DB_NAME: !Ref DatabaseName
+          DB_USER: !Ref SolutionUser
+          DB_PASSWORD: !Ref SolutionUserPassword
+          STAGE: !Ref Stage
+      Events:
+        ReadApi:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            RestApiId: !Ref OFPAPI
+            Path: /{proxy+}
+            Method: ANY
+      Policies:
+        - AWSLambdaVPCAccessExecutionRole
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref DatabaseSecurityGroup
+        SubnetIds:
+          - !Ref PublicSubnetA
+          - !Ref PublicSubnetB
+#######################################################################################################
+#
+#  Resources / APIs
+#
+#######################################################################################################
+  OFPAPI:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref Stage
+      Cors:
+        AllowMethods: "'GET,OPTIONS,DELETE,PUT,POST,PATCH'"
+        AllowHeaders: "'Content-Type, Authorization'"
+        AllowOrigin: "'*'"
+#######################################################################################################
+#
+#  Resources / RDS
+#
+#######################################################################################################
+# Aurora Serverless Cluster
+  RDSAurora:
+    Type: "AWS::RDS::DBCluster"
+    Properties:
+      AssociatedRoles:
+        - FeatureName: 'Lambda'
+          RoleArn: !GetAtt PostgresLambdaRole.Arn
+      DatabaseName: !Ref DatabaseName
+      DBClusterIdentifier: !Sub "${AWS::StackName}-cluster"
+      DBSubnetGroupName: !Ref PublicSubnetGroup
+      Engine: aurora-postgresql
+      EngineVersion: 15.5
+      MasterUsername: !Ref DatabaseAdminUser
+      MasterUserPassword: !Ref DatabaseAdminPassword
+      ServerlessV2ScalingConfiguration:
+        MinCapacity: 0.5
+        MaxCapacity: 8
+      Port: 5432
+      VpcSecurityGroupIds:
+        - !Ref DatabaseSecurityGroup
+
+  RDSDBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      Engine: aurora-postgresql
+      DBInstanceClass: db.serverless
+      DBClusterIdentifier: !Ref RDSAurora
+      PubliclyAccessible: true
+
+  # Postgres Lambda Instance Profile
+  PostgresLambdaInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: /
+      Roles:
+        - !Ref PostgresLambdaRole
+
+  # Postgres Lambda Role  
+  PostgresLambdaRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - rds.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: PostgresLambdaPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: 
+                  - "lambda:InvokeFunction"
+                Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:*"
+  # Database Subnet Group
+  PublicSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties: 
+      DBSubnetGroupName: !Sub "${AWS::StackName}-${AWS::Region}-${AWS::AccountId}-public-subnet-group"
+      DBSubnetGroupDescription: Public Subnet Groups
+      SubnetIds:
+        - !Ref PublicSubnetA
+        - !Ref PublicSubnetB
+#######################################################################################################
+#
+#  Resources / Security Groups
+#
+#######################################################################################################
+  DatabaseSecurityGroupIngress:
+   Type: 'AWS::EC2::SecurityGroupIngress'
+   Properties:
+      GroupId: !Ref DatabaseSecurityGroup
+      IpProtocol: -1
+      FromPort: -1
+      ToPort: -1
+      SourceSecurityGroupId: !GetAtt DatabaseSecurityGroup.GroupId
+
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    DependsOn:
+      - PublicSubnetA
+      - PublicSubnetB
+    Properties:
+      GroupDescription: Allow http to client host
+      VpcId: !Ref VPC
+      SecurityGroupEgress:
+      - IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        CidrIp: 0.0.0.0/0
+#######################################################################################################
+#
+#  Resources / VPC
+#
+#######################################################################################################
+  # VPC
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 172.16.0.0/26
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+      - Key: name
+        Value: !Sub ${AWS::StackName}-VPC
+
+  # Subnets
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 172.16.0.1/27
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-PublicA
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 172.16.0.32/27
+      AvailabilityZone: !Select [ 1, !GetAZs ]
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-PublicB
+
+  # Intenet Gateway
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    DependsOn: VPC
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # Route Table
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  # Attach the public subnets to public route table
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetB
+      RouteTableId: !Ref PublicRouteTable
+
+  # Create endpoint gateway for S3
+  S3Endpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action:
+              - 's3:*'
+            Resource:
+              - 'arn:aws:s3:::*'
+      RouteTableIds:
+        - !Ref PublicRouteTable
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcId: !Ref VPC
+      VpcEndpointType: Gateway
+#######################################################################################################
+#
+#  Outputs
+#
+#######################################################################################################
+Outputs:
+  CloudFrontURL:
+    Description: "The CloudFront distribution URL"
+    Value: !GetAtt CloudFrontDistribution.DomainName

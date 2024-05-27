@@ -1,0 +1,11 @@
+version = 0.1
+[default.deploy.parameters]
+stack_name = "ofp-backend"
+resolve_s3 = true
+s3_prefix = "ofp-backend"
+region = "us-east-1"
+profile = "khartes"
+confirm_changeset = false
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "Stage=\"dev\" DatabaseName=\"ofp\" DatabaseAdminUser=\"postgres\" SolutionUser=\"ofp_user\" DataBaseUtilsLayerVersion=\"38\" PandasLayerVersion=\"1\" SQLAlchemyLayerVersion=\"1\""
+image_repositories = []

@@ -1,0 +1,348 @@
+
+from database import execute_query, sql_replace_params, execute_query_to_dataframe
+from case_style import snake_keys_to_camel
+from .query import *
+from .layer import prepare_layer_info
+from fastapi import HTTPException
+import os
+import pandas as pd
+import calendar
+
+PG_URI = 'postgresql://{0}:{1}@{2}:{3}/{4}'.format( os.environ['DB_USER'],
+                                                    os.environ['DB_PASSWORD'],
+                                                    os.environ['DB_HOST'],
+                                                    os.environ['DB_PORT'],
+                                                    os.environ['DB_NAME'])
+MES_DICT = {
+  1: 'Janeiro',
+  2: 'Fevereiro',
+  3: 'Março',
+  4: 'Abril',
+  5: 'Maio',
+  6: 'Junho',
+  7: 'Julho',
+  8: 'Agosto',
+  9: 'Setembro',
+  10: 'Outubro',
+  11: 'Novembro',
+  12: 'Dezembro'}
+
+ESTADOS_DICT = {
+"AC": {"nome": "Acre", "prefixo": "do"},
+"AP": {"nome": "Amapá", "prefixo": "do"},
+"AM": {"nome": "Amazonas", "prefixo": "do"},
+"MT": {"nome": "Mato Grosso ", "prefixo": "do"},
+"PA": {"nome": "Pará", "prefixo": "do"},
+"RO": {"nome": "Rondônia", "prefixo": "de"},
+"RR": {"nome": "Roraima", "prefixo": "de"},
+}
+
+def get_fpnd_as_mvt(z,x,y):
+    params = {
+        'z': z,
+        'x': x,
+        'y': y
+    }
+    query = sql_replace_params(DQ_GEO_FPND_AS_MVT, params)
+    return execute_query(PG_URI, query)[0]['mvt'].tobytes()
+
+def get_map_data():
+    try:
+        last_month = execute_query(PG_URI, DQ_MAP_DATA_LAST_MONTH)[0]['month']
+
+        responses = _get_layers(last_month)
+
+        layers_legends = {}
+        layers_data = []
+        for lyr in responses:
+            layers_legends[lyr['layer_name']] = lyr['legend']
+            layers_data.append(lyr['data'])
+        data = pd.concat(layers_data, axis=1, ignore_index=False)
+        
+        return snake_keys_to_camel({
+            'last_month': last_month,
+            'layers_legends':layers_legends,
+            'data': data.T.to_dict('dict')
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def get_entenda_data(esfera=None, ufs=None, fpnd=None):
+    params = { 'where_clause': _generate_where_clause(esfera, ufs, fpnd)}
+    informacao_df = execute_query_to_dataframe(PG_URI, sql_replace_params(DQ_ENTENDA_INFORMACAO, params)) 
+    desmatamento_df = execute_query_to_dataframe(PG_URI, sql_replace_params(DQ_ENTENDA_DESMATAMENTO, params))  
+
+    result = {**_get_territorial_context(ufs)}
+    # Calculando a área total da floresta pública não destinada (fpnd_area_ha) e arredondando o resultado para duas casas decimais
+    fpnd_area_total_ha = informacao_df['fpnd_area_ha'].sum()
+    result['entenda_fpnd_area_total_ha'] = round(informacao_df['fpnd_area_ha'].sum(),2)
+
+    # Calculando a quantidade equivalente de campos de futebol para a área total das FPND (fpnd_area_ha)
+    # Considerando que cada campo de futebol possui aproximadamente 0.714 hectares
+    result['entenda_fpnd_equivalencia_futebol_qtd'] = round(fpnd_area_total_ha / 0.714, 2)
+
+    # Calculando a área total das FPND categorizadas como "Estadual" e arredondando o resultado para duas casas decimais
+    result['categoria_fpnd_estadual_area_per'] = round((informacao_df[informacao_df['esfera'] == 'Estadual']['fpnd_area_ha'].sum() / fpnd_area_total_ha) * 100 , 2)
+
+    # Calculando a área total das FPND categorizadas como "Federal" e arredondando o resultado para duas casas decimais
+    result['categoria_fpnd_federal_area_per'] = round((informacao_df[informacao_df['esfera'] == 'Federal']['fpnd_area_ha'].sum() / fpnd_area_total_ha) * 100, 2)
+
+    # Calculando o estoque total de carbono no solo em toneladas e arredondando o resultado para duas casas decimais
+    carbono_estoque_ton = informacao_df['carbono_estoque_ton'].sum()
+    result['estoque_carbono_ton'] = round(carbono_estoque_ton, 2)
+
+    # Calculando a equivalência total do estoque de carbono em peso de CO2 em toneladas e arredondando o resultado para duas casas decimais
+    result['estoque_carbono_equivalencia_peso_ton'] = round(carbono_estoque_ton * 3.17, 2)
+
+    # Calculando a área total de sobreposição do CAR com as FPND em hectares e arredondando o resultado para duas casas decimais
+    car_sobreposicao_fpnd_area_ha = round(informacao_df['car_sobreposicao_fpnd_ha'].sum(), 2)
+    result['car_sobreposicao_fpnd_area_ha'] = car_sobreposicao_fpnd_area_ha
+
+    # Calculando a equivalência da área de sobreposição do CAR com FPND em quantidade de campos de futebol
+    result['car_sobreposicao_fpnd_equivalencia_futebol_qtd'] = round(informacao_df['car_sobreposicao_fpnd_ha'].sum() / 0.714, 2)
+
+    # Calculando a porcentagem da área de sobreposição do CAR com FPND em relação à área total das FPND e arredondando o resultado para duas casas decimais
+    # Certifique-se de que o denominador não é zero para evitar divisão por zero
+    if fpnd_area_total_ha > 0:
+        result['car_sobreposicao_fpnd_area_per'] = round((informacao_df['car_sobreposicao_fpnd_ha'].sum() / fpnd_area_total_ha) * 100, 2)
+    else:
+        result['car_sobreposicao_fpnd_area_per'] = None
+
+    # Calculate the mean deforestation area for both groups
+    car = informacao_df['car_sobreposicao_fpnd_ha'].sum()
+    desmatamento = informacao_df['desmatamento_area_ha'].sum()
+    result['car_comparacao_desmatamento'] = int(car/desmatamento)
+
+    result['car_grafico'] = [
+        {'xField': 'Total', 'colorField': 'CAR', 'yField': round(car_sobreposicao_fpnd_area_ha, 1)},
+        {'xField': 'Total', 'colorField': 'FPND', 'yField': round(fpnd_area_total_ha-car_sobreposicao_fpnd_area_ha, 1)},
+    ]
+
+   
+    # Calculando a área total de interseção de mineração com as FPND em hectares e arredondando o resultado para duas casas decimais
+    result['mineracao_sobreposicao_fpnd_area_ha'] = round(informacao_df['mineracao_area_ha'].sum(), 2)
+
+    # Calculando a equivalência da área de interseção de mineração com FPND em quantidade de campos de futebol
+    result['mineracao_sobreposicao_fpnd_equivalencia_futebol_qtd'] = round(informacao_df['mineracao_area_ha'].sum() / 0.714, 2)
+
+    # Média da diversidade de espécies nas FPND categorizadas como "Federal" e arredondando o resultado para duas casas decimais
+    result['biodiversidade_fpnd_federal_media'] = round(informacao_df[informacao_df['esfera'] == 'Federal']['especie_diversidade_media'].mean(), 2) if esfera in [None, 'Federal'] else 0
+
+    # Média da diversidade de espécies nas FPND categorizadas como "Federal" e arredondando o resultado para duas casas decimais
+    result['biodiversidade_fpnd_todas_media'] = round(informacao_df['especie_diversidade_media'].mean(), 2)
+
+
+    # Área de desmatamento Total nas FPNDs
+    result['desmatamento_area_ha'] = round(informacao_df['desmatamento_area_ha'].sum(), 2)
+
+    # Área de florestas nativas nas FPNDs
+    result['desmatamento_floresta_nativa_ha'] = round(informacao_df['floresta_atual_area_ha'].sum(), 2) 
+    # Gráfico
+
+    floresta = informacao_df[informacao_df['esfera'] == 'Estadual']['floresta_atual_area_ha'].sum()
+    desmatamento = informacao_df[informacao_df['esfera'] == 'Estadual']['desmatamento_area_ha'].sum()
+    total = floresta+desmatamento
+    if total == 0:
+        result['desmatamento_grafico_fpnd_estaduais'] = None
+    else:
+        result['desmatamento_grafico_fpnd_estaduais'] = [
+            {'colorField': 'Floresta', 'angleField': round((floresta/total)*100,1) },
+            {'colorField': 'Desmatamento', 'angleField': round((desmatamento/total)*100,1)}
+        ]
+
+
+
+    result = snake_keys_to_camel({
+        **result,
+        **_get_info_deter(desmatamento_df),
+        **_get_info_prodes(desmatamento_df)
+        })
+
+    return result
+
+def _get_territorial_context(ufs):
+    recorte_prefixo =  'o bioma'
+    recorte_nome = 'Amazônico'
+
+    if ufs and len(ufs) == 1:
+        recorte_prefixo =  f'o estado {ESTADOS_DICT[ufs[0]]['prefixo']}'
+        recorte_nome = ESTADOS_DICT[ufs[0]]['nome']
+    if ufs and len(ufs) > 1:
+        ufs.sort()
+        recorte_prefixo =  f'os estados {ESTADOS_DICT[ufs[0]]['prefixo']}'
+        recorte_nome = ', '.join([ ESTADOS_DICT[uf]['nome'] for uf in ufs[:-1]]) + f' e {ESTADOS_DICT[ufs[-1]]['nome']}'
+ 
+    return {
+        'recorte_prefixo': recorte_prefixo,
+        'recorte_nome': recorte_nome
+    }
+
+def _get_info_deter(desmatamento_df):
+
+    # Convertendo a coluna 'data' para datetime
+    desmatamento_df['data'] = pd.to_datetime(desmatamento_df['data'])
+
+    # Filtrando o DataFrame para entradas onde a fonte é 'DETER'
+    deter_df = desmatamento_df[desmatamento_df['fonte'] == 'deter'].reset_index()
+
+    # Encontrando o último mês disponível no DataFrame para dados 'DETER'
+    ultimo_mes = deter_df['data'].dt.to_period('M').max()
+    dados_ultimo_mes = deter_df[deter_df['data'].dt.to_period('M') == ultimo_mes]
+
+    # Calculando o total de área desmatada no último mês
+    alerta_mensal_desmatamento_ultimo_mes_ha = dados_ultimo_mes['area_ha'].sum()
+
+    # Comparando com o mesmo mês do ano anterior
+    mes_ano_anterior = ultimo_mes - 12
+    dados_ano_anterior = deter_df[deter_df['data'].dt.to_period('M') == mes_ano_anterior]
+    area_ano_anterior = dados_ano_anterior['area_ha'].sum() if not dados_ano_anterior.empty else 0
+
+    # Calculando a diferença percentual
+    if area_ano_anterior > 0:
+        alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_perultimo_mes_per = \
+            round(abs(((alerta_mensal_desmatamento_ultimo_mes_ha - area_ano_anterior) / area_ano_anterior) * 100), 2)
+        alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_direcao = 'maior' if alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_perultimo_mes_per > 0 else 'menor'
+    else:
+        alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_perultimo_mes_per = None
+        alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_direcao = None
+
+
+    ultimo_mes_nome = MES_DICT[ultimo_mes.month]
+
+
+    deter_df = pd.DataFrame({
+        'ano': deter_df['data'].dt.year,   # Extraindo o ano da coluna 'data'
+        'mes': deter_df['data'].dt.month,  # Extraindo o mês da coluna 'data'
+        'area_ha': deter_df['area_ha']     # Mantendo a coluna 'area_ha'
+    })
+
+    # Agrupando por ano e mês e somando a área desmatada
+    grouped_df = deter_df.groupby(['ano', 'mes']).agg(y_field=('area_ha', 'sum')).round(1)
+    # Resetar o índice para transformar 'ano' e 'mes' em colunas
+    grouped_df.reset_index(inplace=True)
+
+    # Substituir os valores de 'mes' pelos nomes usando o dicionário MES_DICT
+    grouped_df['mes'] = grouped_df['mes'].map({ k:v[:3] for k, v in MES_DICT.items()})
+    grouped_df['ano'] = grouped_df['ano'].astype(str)
+    grouped_df.rename(columns={'ano':'colorField', 'mes': 'xField'}, inplace=True)
+    alerta_mensal_grafico_historico_desmatamento = grouped_df.to_dict(orient='records')
+
+    return {
+        'ultimo_mes': ultimo_mes_nome,
+        'alerta_mensal_desmatamento_ultimo_mes_ha': round(alerta_mensal_desmatamento_ultimo_mes_ha, 2),
+        'alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_per': alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_perultimo_mes_per,
+        'alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_direcao': alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_direcao,
+        'alerta_mensal_grafico_historico_desmatamento': alerta_mensal_grafico_historico_desmatamento
+        }
+
+def _get_info_prodes(desmatamento_df):
+
+    # Convertendo a coluna 'data' para datetime
+    desmatamento_df['data'] = pd.to_datetime(desmatamento_df['data'])
+
+    # Filtrando o DataFrame para entradas onde a fonte é 'PRODES'
+    prodes_df = desmatamento_df[desmatamento_df['fonte'] == 'prodes'].reset_index()
+
+    # Encontrando o primeiro e o último ano disponível no DataFrame para dados 'PRODES'
+    primeiro_ano = prodes_df['data'].dt.to_period('Y').min()
+    ultimo_ano = prodes_df['data'].dt.to_period('Y').max()
+
+    
+    dados_primeiro_ano = prodes_df[prodes_df['data'].dt.to_period('Y') == primeiro_ano]
+    dados_ultimo_ano = prodes_df[prodes_df['data'].dt.to_period('Y') == ultimo_ano]
+
+    # Calculando o total de área desmatada 
+    desmatamento_primeiro_ano_ha = dados_primeiro_ano['area_ha'].sum()
+    desmatamento_ultimo_ano_ha = dados_ultimo_ano['area_ha'].sum()
+
+
+    # Calculando a diferença percentual
+    if desmatamento_primeiro_ano_ha > 0:
+        desmatamento_comparacao_primeiro_ano_ultimo_ano_per = \
+            round(((desmatamento_ultimo_ano_ha - desmatamento_primeiro_ano_ha) / desmatamento_primeiro_ano_ha) * 100, 2)
+    else:
+        desmatamento_comparacao_primeiro_ano_ultimo_ano_per = None
+
+    prodes_df = pd.DataFrame({
+        'ano': prodes_df['data'].dt.year,   # Extraindo o ano da coluna 'data'
+        'area_ha': prodes_df['area_ha']     # Mantendo a coluna 'area_ha'
+    })
+
+    # Agrupando por ano e somando a área desmatada
+    grouped_df = prodes_df.groupby(['ano']).agg(y_field=('area_ha', 'sum')).round(1)
+    # Resetar o índice para transformar 'ano' em coluna
+    grouped_df.reset_index(inplace=True)
+    grouped_df['y_field'] = grouped_df['y_field'].cumsum()
+    grouped_df.rename(columns={'ano': 'xField'}, inplace=True)
+    desmatamento_grafico_desmatamento_acumulado = grouped_df.to_dict(orient='records')
+
+    return {
+        'primeiro_ano': str(primeiro_ano.year),
+        'ultimo_ano': str(ultimo_ano.year),
+        'desmatamento_comparacao_primeiro_ano_ultimo_ano_per': desmatamento_comparacao_primeiro_ano_ultimo_ano_per,
+        'desmatamento_grafico_desmatamento_acumulado': desmatamento_grafico_desmatamento_acumulado
+        }
+
+def _get_layers(last_month):
+    layers = [
+            { 'value_name': 'land_cover', 'legend_title': 'Área desmatada até 2022 em ha'},
+            { 'value_name': 'underground_carbon_storage', 'legend_title': 'Densidade de Carbono em ton/ha'},
+            { 'value_name': 'species_diversity', 'legend_title': 'Média de  diversidade de espécies'},
+            { 'value_name': 'car_overlap', 'legend_title': 'Percentual de área FPND sobreposta com área de CAR'},
+            { 'value_name': 'mining', 'legend_title': 'Área de Mineração em FPND em ha'}]
+    result = [
+        _get_deforestation_last_month(last_month),
+        _get_deforestation_last_10_years()
+    ]
+
+    df = execute_query_to_dataframe(PG_URI, DQ_MAP_DATA)  
+    for lyr in layers:
+        result.append(prepare_layer_info(
+            df, 
+            lyr['value_name'],
+            lyr['legend_title']))
+    return result
+
+def _get_deforestation_last_month(last_month, offset=25):
+    df = execute_query_to_dataframe(PG_URI, DQ_MAP_DATA_DEFORESTATION_LAST_MONTH)       
+    result = prepare_layer_info(
+            df, 
+            'deforastation_last_month',
+            f'Desmatamento no último mês de {last_month} em ha' )
+    df = result['data']
+
+    gray = '#80808000'  # Hexadecimal for gray
+    if gray not in df['deforastation_last_month_color'].cat.categories:
+        df['deforastation_last_month_color'] = df['deforastation_last_month_color'].cat.add_categories([gray])
+
+    df.iloc[offset:, df.columns.get_loc('deforastation_last_month_color')] = gray
+    result['data'] = df
+    return result
+ 
+def _get_deforestation_last_10_years():
+    df = execute_query_to_dataframe(PG_URI, DQ_MAP_DATA_DEFORESTATION_LAST_10_YEARS)       
+    return prepare_layer_info(
+            df, 
+            'deforastation_last_10_years',
+            f'Desmatamento dos últimos 10 anos em ha' )
+     
+def _generate_where_clause(esfera=None, ufs=None, fpnd=None):
+    conditions = []
+    
+    if esfera:
+        conditions.append(f"esfera = '{esfera}'")
+    
+    if ufs:
+        states_str = ', '.join(f"'{state}'" for state in ufs)
+        conditions.append(f"uf IN ({states_str})")
+    
+    if fpnd:
+        conditions.append(f"codigo = '{fpnd}'")
+    
+    if conditions:
+        where_clause = "WHERE " + " AND ".join(conditions)
+    else:
+        where_clause = ""
+    
+    return where_clause

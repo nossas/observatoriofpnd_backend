@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  ETLambda layer para utilizacao na solução Data Engine
+#######################################################################################################
+#
+#  Resources / Layers
+#
+#######################################################################################################
+Resources:
+  DatabaseUtilsLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: DataBaseUtilsLayer
+      Description: Database Utils
+      ContentUri: database_utils/
+      CompatibleRuntimes:
+        - python3.12
+      RetentionPolicy: Retain
+    Metadata:
+      BuildMethod: makefile
+      
+  PandasLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: PandasLayer
+      Description: Pandas Layer
+      ContentUri: pandas/
+      CompatibleRuntimes:
+        - python3.12
+      RetentionPolicy: Retain
+    Metadata:
+      BuildMethod: makefile
+
+  SQLAlchemyLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: SQLAlchemyLayer
+      Description: SQLAlchemy Layer
+      ContentUri: sqlalchemy/
+      CompatibleRuntimes:
+        - python3.12
+      RetentionPolicy: Retain
+    Metadata:
+      BuildMethod: makefile
+
+#######################################################################################################
+#
+#  Outputs
+#
+#######################################################################################################
+Outputs:
+  DatabaseUtilsLayerArn:
+    Description: Database Utils Layer
+    Value: !Ref DatabaseUtilsLayer
+  PandasLayerArn:
+    Description: Pandas Layer
+    Value: !Ref PandasLayer
+  SQLAlchemyLayerArn:
+    Description: SQLAlchemy Layer
+    Value: !Ref SQLAlchemyLayer

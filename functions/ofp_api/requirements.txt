@@ -1,0 +1,4 @@
+fastapi==0.110.1
+jenkspy==0.4.0
+mangum==0.17.0
+pandas==2.2.2

@@ -1,0 +1,19 @@
+DO
+$$$$
+BEGIN
+	IF NOT EXISTS (
+    	SELECT FROM pg_catalog.pg_roles  -- SELECT list can be empty for this
+    	WHERE  rolname = '${DB_SOLUTION_USER}') THEN
+
+			CREATE ROLE ${DB_SOLUTION_USER} WITH 
+				NOSUPERUSER
+				NOCREATEDB
+				NOCREATEROLE
+				NOINHERIT
+				LOGIN
+				NOREPLICATION
+				NOBYPASSRLS
+				PASSWORD '${DB_SOLUTION_PASSWORD}';
+	END IF;
+END
+$$$$;
