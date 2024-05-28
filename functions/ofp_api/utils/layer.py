@@ -16,7 +16,7 @@ def prepare_layer_info(
             breaks.sort()
             n_classes = len(breaks)-1
         color_ramp = interpolate_color(start_color, end_color, n_classes)
-        legend_bins =  [{ color_ramp[i] : f' < {int(breaks[i+1])}' } for i in range(n_classes) ] 
+        legend_bins =  [{ color_ramp[i] : f'{int(breaks[i])} - {int(breaks[i+1])}' } for i in range(n_classes) ] 
      
         df[f'{value_name}_color'] = pd.cut(df[value_name], bins=breaks, include_lowest=True, labels=color_ramp)
         return  {
