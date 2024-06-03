@@ -7,7 +7,7 @@ from .query import DQ_MAP_DATA_LAST_MONTH, DQ_GEO_FPND_AS_MVT, DQ_MAP_DATA, DQ_E
 import os
 import math
 import pandas as pd
-
+import json
 
 PG_URI = 'postgresql://{0}:{1}@{2}:{3}/{4}'.format(os.environ['DB_USER'],
                                                    os.environ['DB_PASSWORD'],
@@ -47,7 +47,7 @@ def get_entenda_data(esfera=None, ufs=None, fpnd=None):
 
     fpnd_area_total_ha = informacao_df['fpnd_area_ha'].sum()
     if fpnd_area_total_ha == 0:
-        return _get_empty_result(ufs)
+        return _get_empty_result(ufs, fpnd)
 
     result = {
         **_get_entenda_s_biodiversidade(informacao_df, esfera),
@@ -59,7 +59,7 @@ def get_entenda_data(esfera=None, ufs=None, fpnd=None):
         **_get_entenda_s_mineracao(informacao_df),
         **_get_info_deter(desmatamento_df),
         **_get_info_prodes(desmatamento_df),
-        **_get_territorial_context(ufs)
+        **_get_territorial_context(ufs, fpnd)
     }
 
     return snake_keys_to_camel(_replace_nans_with_zeros(result))
@@ -109,6 +109,7 @@ def _replace_nans_with_zeros(data):
                     _replace_nans_with_zeros(item)
     return data
 
+
 def _generate_where_clause(esfera=None, ufs=None, fpnd=None):
     conditions = []
 
@@ -120,7 +121,7 @@ def _generate_where_clause(esfera=None, ufs=None, fpnd=None):
         conditions.append(f"uf IN ({states_str})")
 
     if fpnd:
-        conditions.append(f"codigo = '{fpnd}'")
+        conditions.append(f"fpnd.codigo = '{fpnd}'")
 
     if conditions:
         where_clause = "WHERE " + " AND ".join(conditions)
@@ -383,237 +384,32 @@ def _get_layers(last_month):
     return result
 
 
-def _get_territorial_context(ufs):
+def _get_territorial_context(ufs, fpnd):
     recorte_prefixo = 'o bioma'
     recorte_nome = 'Amazônico'
-
-    if ufs and len(ufs) == 1:
-        recorte_prefixo = f'o estado {ESTADOS_DICT[ufs[0]]['prefixo']}'
-        recorte_nome = ESTADOS_DICT[ufs[0]]['nome']
-    if ufs and len(ufs) > 1:
-        ufs.sort()
-        recorte_prefixo = f'os estados {ESTADOS_DICT[ufs[0]]['prefixo']}'
-        recorte_nome = ', '.join([ESTADOS_DICT[uf]['nome'] for uf in ufs[:-1]]) + f' e {ESTADOS_DICT[ufs[-1]]['nome']}'
-
+    if not fpnd:
+        if ufs and len(ufs) == 1:
+            recorte_prefixo = f'o estado {ESTADOS_DICT[ufs[0]]['prefixo']}'
+            recorte_nome = ESTADOS_DICT[ufs[0]]['nome']
+        if ufs and len(ufs) > 1:
+            ufs.sort()
+            recorte_prefixo = f'os estados {ESTADOS_DICT[ufs[0]]['prefixo']}'
+            recorte_nome = ', '.join([ESTADOS_DICT[uf]['nome'] for uf in ufs[:-1]]) + f' e {ESTADOS_DICT[ufs[-1]]['nome']}'
+    else:
+        recorte_prefixo = 'a FPND'
+        recorte_nome = fpnd
     return {
         'recorte_prefixo': recorte_prefixo,
         'recorte_nome': recorte_nome
     }
 
 
-def _get_empty_result(ufs):
+def _get_empty_result(ufs, fpnd):
+    current_dir = os.path.dirname(__file__)
+    file_path = os.path.join(current_dir, 'empty_result.json')
+    with open(file_path, 'r') as file:
+        empty_result = json.load(file)
     result = {
-        "biodiversidade_fpnd_federal_media": 0,
-        "biodiversidade_fpnd_todas_media": 0,
-        "car_sobreposicao_fpnd_area_ha": 0,
-        "car_sobreposicao_fpnd_equivalencia_futebol_qtd": 0,
-        "car_sobreposicao_fpnd_area_per": "0.0",
-        "car_comparacao_desmatamento": 0,
-        "car_grafico": [
-            {
-                "xField": "Total",
-                "colorField": "CAR",
-                "yField": 0
-            },
-            {
-                "xField": "Total",
-                "colorField": "FPND",
-                "yField": 0
-            }
-        ],
-        "estoque_carbono_ton": 0,
-        "estoque_carbono_equivalencia_peso_ton": 0,
-        "categoria_fpnd_estadual_area_per": "0.0",
-        "categoria_fpnd_federal_area_per": "0.0",
-        "desmatamento_area_ha": 0,
-        "desmatamento_floresta_nativa_ha": 0,
-        "desmatamento_grafico_fpnd_estaduais": [
-            {
-                "colorField": "Floresta",
-                "angleField": 0
-            },
-            {
-                "colorField": "Desmatamento",
-                "angleField": 0
-            }
-        ],
-        "entenda_fpnd_area_total_ha": 0,
-        "entenda_fpnd_equivalencia_futebol_qtd": 0,
-        "mineracao_sobreposicao_fpnd_area_ha": 0,
-        "mineracao_sobreposicao_fpnd_equivalencia_futebol_qtd": 0,
-        "ultimo_mes": "",
-        "alerta_mensal_desmatamento_ultimo_mes_ha": 0,
-        "alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_per": "0.0",
-        "alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_direcao": "",
-        "alerta_mensal_grafico_historico_desmatamento": [
-            {
-                "colorField": "2023",
-                "xField": "Jan",
-                "y_field": 0
-            },
-            {
-                "colorField": "2023",
-                "xField": "Fev",
-                "y_field": 0
-            },
-            {
-                "colorField": "2023",
-                "xField": "Mar",
-                "y_field": 0
-            },
-            {
-                "colorField": "2023",
-                "xField": "Abr",
-                "y_field": 0
-            },
-            {
-                "colorField": "2023",
-                "xField": "Mai",
-                "y_field": 0
-            },
-            {
-                "colorField": "2023",
-                "xField": "Jun",
-                "y_field": 0
-            },
-            {
-                "colorField": "2023",
-                "xField": "Jul",
-                "y_field": 0
-            },
-            {
-                "colorField": "2023",
-                "xField": "Ago",
-                "y_field": 0
-            },
-            {
-                "colorField": "2023",
-                "xField": "Set",
-                "y_field": 0
-            },
-            {
-                "colorField": "2023",
-                "xField": "Out",
-                "y_field": 0
-            },
-            {
-                "colorField": "2023",
-                "xField": "Nov",
-                "y_field": 0
-            },
-            {
-                "colorField": "2023",
-                "xField": "Dez",
-                "y_field": 0
-            }, {
-                "colorField": "2024",
-                "xField": "Jan",
-                "y_field": 0
-            },
-            {
-                "colorField": "2024",
-                "xField": "Fev",
-                "y_field": 0
-            },
-            {
-                "colorField": "2024",
-                "xField": "Mar",
-                "y_field": 0
-            },
-            {
-                "colorField": "2024",
-                "xField": "Abr",
-                "y_field": 0
-            },
-            {
-                "colorField": "2024",
-                "xField": "Mai",
-                "y_field": 0
-            },
-            {
-                "colorField": "2024",
-                "xField": "Jun",
-                "y_field": 0
-            },
-            {
-                "colorField": "2024",
-                "xField": "Jul",
-                "y_field": 0
-            },
-            {
-                "colorField": "2024",
-                "xField": "Ago",
-                "y_field": 0
-            },
-            {
-                "colorField": "2024",
-                "xField": "Set",
-                "y_field": 0
-            },
-            {
-                "colorField": "2024",
-                "xField": "Out",
-                "y_field": 0
-            },
-            {
-                "colorField": "2024",
-                "xField": "Nov",
-                "y_field": 0
-            },
-            {
-                "colorField": "2024",
-                "xField": "Dez",
-                "y_field": 0
-            }
-        ],
-        "primeiro_ano": "2013",
-        "ultimo_ano": "2023",
-        "desmatamento_comparacao_primeiro_ano_ultimo_ano_per": "",
-        "desmatamento_grafico_desmatamento_acumulado": [
-            {
-                "xField": 2013,
-                "y_field": 0
-            },
-            {
-                "xField": 2014,
-                "y_field": 0
-            },
-            {
-                "xField": 2015,
-                "y_field": 0
-            },
-            {
-                "xField": 2016,
-                "y_field": 0
-            },
-            {
-                "xField": 2017,
-                "y_field": 0
-            },
-            {
-                "xField": 2018,
-                "y_field": 0
-            },
-            {
-                "xField": 2019,
-                "y_field": 0
-            },
-            {
-                "xField": 2020,
-                "y_field": 0
-            },
-            {
-                "xField": 2021,
-                "y_field": 0
-            },
-            {
-                "xField": 2022,
-                "y_field": 0
-            },
-            {
-                "xField": 2023,
-                "y_field": 0
-            }
-        ],
-        **_get_territorial_context(ufs)}
+        **empty_result,
+        **_get_territorial_context(ufs, fpnd)}
     return snake_keys_to_camel(result)

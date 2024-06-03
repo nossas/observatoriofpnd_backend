@@ -1,0 +1,213 @@
+{
+        "biodiversidade_fpnd_federal_media": 0,
+        "biodiversidade_fpnd_todas_media": 0,
+        "car_sobreposicao_fpnd_area_ha": 0,
+        "car_sobreposicao_fpnd_equivalencia_futebol_qtd": 0,
+        "car_sobreposicao_fpnd_area_per": "0.0",
+        "car_comparacao_desmatamento": 0,
+        "car_grafico": [
+            {
+                "xField": "Total",
+                "colorField": "CAR",
+                "yField": 0
+            },
+            {
+                "xField": "Total",
+                "colorField": "FPND",
+                "yField": 0
+            }
+        ],
+        "estoque_carbono_ton": 0,
+        "estoque_carbono_equivalencia_peso_ton": 0,
+        "categoria_fpnd_estadual_area_per": "0.0",
+        "categoria_fpnd_federal_area_per": "0.0",
+        "desmatamento_area_ha": 0,
+        "desmatamento_floresta_nativa_ha": 0,
+        "desmatamento_grafico_fpnd_estaduais": [
+            {
+                "colorField": "Floresta",
+                "angleField": 0
+            },
+            {
+                "colorField": "Desmatamento",
+                "angleField": 0
+            }
+        ],
+        "entenda_fpnd_area_total_ha": 0,
+        "entenda_fpnd_equivalencia_futebol_qtd": 0,
+        "mineracao_sobreposicao_fpnd_area_ha": 0,
+        "mineracao_sobreposicao_fpnd_equivalencia_futebol_qtd": 0,
+        "ultimo_mes": "",
+        "alerta_mensal_desmatamento_ultimo_mes_ha": 0,
+        "alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_per": "0.0",
+        "alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_direcao": "",
+        "alerta_mensal_grafico_historico_desmatamento": [
+            {
+                "colorField": "2023",
+                "xField": "Jan",
+                "y_field": 0
+            },
+            {
+                "colorField": "2023",
+                "xField": "Fev",
+                "y_field": 0
+            },
+            {
+                "colorField": "2023",
+                "xField": "Mar",
+                "y_field": 0
+            },
+            {
+                "colorField": "2023",
+                "xField": "Abr",
+                "y_field": 0
+            },
+            {
+                "colorField": "2023",
+                "xField": "Mai",
+                "y_field": 0
+            },
+            {
+                "colorField": "2023",
+                "xField": "Jun",
+                "y_field": 0
+            },
+            {
+                "colorField": "2023",
+                "xField": "Jul",
+                "y_field": 0
+            },
+            {
+                "colorField": "2023",
+                "xField": "Ago",
+                "y_field": 0
+            },
+            {
+                "colorField": "2023",
+                "xField": "Set",
+                "y_field": 0
+            },
+            {
+                "colorField": "2023",
+                "xField": "Out",
+                "y_field": 0
+            },
+            {
+                "colorField": "2023",
+                "xField": "Nov",
+                "y_field": 0
+            },
+            {
+                "colorField": "2023",
+                "xField": "Dez",
+                "y_field": 0
+            }, {
+                "colorField": "2024",
+                "xField": "Jan",
+                "y_field": 0
+            },
+            {
+                "colorField": "2024",
+                "xField": "Fev",
+                "y_field": 0
+            },
+            {
+                "colorField": "2024",
+                "xField": "Mar",
+                "y_field": 0
+            },
+            {
+                "colorField": "2024",
+                "xField": "Abr",
+                "y_field": 0
+            },
+            {
+                "colorField": "2024",
+                "xField": "Mai",
+                "y_field": 0
+            },
+            {
+                "colorField": "2024",
+                "xField": "Jun",
+                "y_field": 0
+            },
+            {
+                "colorField": "2024",
+                "xField": "Jul",
+                "y_field": 0
+            },
+            {
+                "colorField": "2024",
+                "xField": "Ago",
+                "y_field": 0
+            },
+            {
+                "colorField": "2024",
+                "xField": "Set",
+                "y_field": 0
+            },
+            {
+                "colorField": "2024",
+                "xField": "Out",
+                "y_field": 0
+            },
+            {
+                "colorField": "2024",
+                "xField": "Nov",
+                "y_field": 0
+            },
+            {
+                "colorField": "2024",
+                "xField": "Dez",
+                "y_field": 0
+            }
+        ],
+        "primeiro_ano": "2013",
+        "ultimo_ano": "2023",
+        "desmatamento_comparacao_primeiro_ano_ultimo_ano_per": "",
+        "desmatamento_grafico_desmatamento_acumulado": [
+            {
+                "xField": 2013,
+                "y_field": 0
+            },
+            {
+                "xField": 2014,
+                "y_field": 0
+            },
+            {
+                "xField": 2015,
+                "y_field": 0
+            },
+            {
+                "xField": 2016,
+                "y_field": 0
+            },
+            {
+                "xField": 2017,
+                "y_field": 0
+            },
+            {
+                "xField": 2018,
+                "y_field": 0
+            },
+            {
+                "xField": 2019,
+                "y_field": 0
+            },
+            {
+                "xField": 2020,
+                "y_field": 0
+            },
+            {
+                "xField": 2021,
+                "y_field": 0
+            },
+            {
+                "xField": 2022,
+                "y_field": 0
+            },
+            {
+                "xField": 2023,
+                "y_field": 0
+            }
+        ]}
