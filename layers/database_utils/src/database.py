@@ -27,6 +27,7 @@ def execute_sql_script(db_uri, script):
     except Exception as e:
         raise e
 
+
 def execute_query(db_uri, query):
     """
     Executes a SQL query and returns the results formatted as a list of dictionaries,
@@ -53,6 +54,7 @@ def execute_query(db_uri, query):
     except Exception as e:
         raise e
 
+
 def execute_query_to_dataframe(db_uri, query):
     """
     Executes a SQL query using pandas' read_sql_query and returns the DataFrame
@@ -68,22 +70,22 @@ def execute_query_to_dataframe(db_uri, query):
     try:
         # Criar um engine SQLAlchemy para conectar ao banco de dados
         engine = create_engine(db_uri, poolclass=NullPool, connect_args={'connect_timeout': 45})
-        
+
         # Executar a consulta e retornar o resultado como um DataFrame
         df = pd.read_sql_query(sqlalchemy_text(query), engine)
-        
+
         # Definir a primeira coluna do DataFrame como índice
         if not df.empty:
             df = df.set_index(df.columns[0])
-        
+
         # Fechar a conexão
         engine.dispose()
-        
+
         return df
     except Exception as e:
         raise e
-    
-    
+
+
 def sql_replace_params(query, params={}):
     """
     Replaces placeholders in a SQL query with actual values from a dictionary, handling None values appropriately.

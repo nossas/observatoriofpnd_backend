@@ -5,13 +5,13 @@ DQ_GEO_FPND_AS_MVT = """
     ),
     mvtgeom AS
     (
-    SELECT ST_AsMVTGeom(st_transform(geom,3857), b.value, 1024, 256, true) AS geom, codigo, nome, esfera, uf, estado
+    SELECT row_number () over (order by codigo) as id, ST_AsMVTGeom(st_transform(geom,3857), b.value, 1024, 256, true) AS geom, codigo, nome, esfera, uf, estado
     FROM 
         ofpnd.floresta_publica_nao_destinada INNER JOIN 
         bounds as b ON geom && st_transform(b.value,4326)
     )
-    SELECT ST_AsMVT(mvtgeom.*,'fpnd',1024) as mvt
-    FROM mvtgeom where geom is not null;
+    SELECT ST_AsMVT(mvtgeom.*,'fpnd', 1024, 'geom', 'id') as mvt
+    FROM mvtgeom;
 """
 
 
