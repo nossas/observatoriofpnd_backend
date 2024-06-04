@@ -69,9 +69,9 @@ Resources:
             QueryString: true
             Cookies:
               Forward: none
-          DefaultTTL: 0
+          DefaultTTL: 86400
           MinTTL: 0
-          MaxTTL: 0
+          MaxTTL: 31536000
           Compress: true
         CacheBehaviors:
           - PathPattern: "/dev/mvt/fpnd/*/*/*.pbf"  # Ajuste para o padrão correto

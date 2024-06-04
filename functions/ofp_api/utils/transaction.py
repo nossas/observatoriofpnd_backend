@@ -286,9 +286,9 @@ def _get_info_deter(desmatamento_df):
         alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_direcao = ''
 
     if ultimo_mes.month == pd.notna:
-        ultimo_mes_nome = MES_DICT[ultimo_mes.month]
-    else:
         ultimo_mes_nome = ''
+    else:
+        ultimo_mes_nome = MES_DICT[ultimo_mes.month]
 
     deter_df = pd.DataFrame({
         'ano': deter_df['data'].dt.year,   # Extraindo o ano da coluna 'data'
@@ -397,7 +397,7 @@ def _get_territorial_context(ufs, fpnd):
             recorte_nome = ', '.join([ESTADOS_DICT[uf]['nome'] for uf in ufs[:-1]]) + f' e {ESTADOS_DICT[ufs[-1]]['nome']}'
     else:
         recorte_prefixo = 'a FPND'
-        recorte_nome = fpnd
+        recorte_nome = 'selecionada'
     return {
         'recorte_prefixo': recorte_prefixo,
         'recorte_nome': recorte_nome
