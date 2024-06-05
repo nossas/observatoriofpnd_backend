@@ -280,7 +280,7 @@ def _get_info_deter(desmatamento_df):
         value = round(abs(((alerta_mensal_desmatamento_ultimo_mes_ha - area_ano_anterior) / area_ano_anterior) * 100), 2)
         alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_perultimo_mes_per = \
             str(value)
-        alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_direcao = 'maior' if value > 0 else 'menor'
+        alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_direcao = 'maior' if value < 0 else 'menor'
     else:
         alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_perultimo_mes_per = ''
         alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_direcao = ''
@@ -367,7 +367,7 @@ def _get_layers(last_month):
     layers = [
         {'value_name': 'land_cover', 'legend_title': 'Área desmatada até 2022 em ha'},
         {'value_name': 'underground_carbon_storage', 'legend_title': 'Densidade de Carbono em ton/ha'},
-        {'value_name': 'species_diversity', 'legend_title': 'Média de  diversidade de espécies'},
+        {'value_name': 'species_diversity', 'legend_title': 'Número médio de  diversidade de espécies'},
         {'value_name': 'car_overlap', 'legend_title': 'Percentual de área FPND sobreposta com área de CAR'},
         {'value_name': 'mining', 'legend_title': 'Área de Mineração em FPND em ha'}]
     result = [

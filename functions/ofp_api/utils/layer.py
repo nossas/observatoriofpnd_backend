@@ -11,6 +11,8 @@ def prepare_layer_info(
     end_color="#752842",
     breaks=None
 ):
+    def add_thousands_separator_br(number):
+        return f"{int(number):,}".replace(",", ".")
 
     if not breaks:
         breaks = jenkspy.jenks_breaks(df[value_name], n_classes=n_classes)
@@ -18,7 +20,7 @@ def prepare_layer_info(
         breaks.sort()
         n_classes = len(breaks) - 1
     color_ramp = interpolate_color(start_color, end_color, n_classes)
-    legend_bins = [{color_ramp[i]: f'{int(breaks[i])} - {int(breaks[i + 1])}'} for i in range(n_classes)]
+    legend_bins = [{color_ramp[i]: f'{add_thousands_separator_br(breaks[i])} - {add_thousands_separator_br(breaks[i + 1])}'} for i in range(n_classes)]
 
     df[f'{value_name}_color'] = pd.cut(df[value_name], bins=breaks, include_lowest=True, labels=color_ramp)
 
