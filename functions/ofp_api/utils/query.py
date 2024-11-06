@@ -15,7 +15,7 @@ DQ_GEO_FPND_AS_MVT = """
 """
 
 DQ_MAP_DATA_LAST_MONTH = """
-    set lc_time  TO 'pt_BR.UTF-8';
+    set lc_time  TO 'en_US.utf8';
     SELECT
         TO_CHAR(max("data"),'TMMonth') "month"
     FROM

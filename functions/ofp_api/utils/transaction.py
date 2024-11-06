@@ -1,6 +1,6 @@
 
-from case_style import snake_keys_to_camel
-from database import execute_query, sql_replace_params, execute_query_to_dataframe
+from .case_style import snake_keys_to_camel # THIS_ONE
+from .database import execute_query, sql_replace_params, execute_query_to_dataframe # THIS_ONE
 from fastapi import HTTPException
 from .layer import prepare_layer_info
 from .query import DQ_MAP_DATA_LAST_MONTH, DQ_GEO_FPND_AS_MVT, DQ_MAP_DATA, DQ_ENTENDA_INFORMACAO, DQ_ENTENDA_DESMATAMENTO, DQ_MAP_DATA_DEFORESTATION_LAST_10_YEARS, DQ_MAP_DATA_DEFORESTATION_LAST_MONTH
@@ -87,7 +87,17 @@ def get_map_data():
             layers_legends[lyr['layer_name']] = lyr['legend']
             layers_data.append(lyr['data'])
         data = pd.concat(layers_data, axis=1, ignore_index=False)
-
+        
+        # THIS_ONE
+        # Para colunas categóricas, adicionar 0 como categoria, se necessário
+        for col in data.select_dtypes(['category']).columns:
+            if 0 not in data[col].cat.categories:
+                data[col] = data[col].cat.add_categories([0])
+        
+        # THIS_ONE
+        # Substituir NaN e valores infinitos por 0
+        data = data.fillna(0).replace([float('inf'), float('-inf')], 0)
+        
         return snake_keys_to_camel({
             'last_month': last_month,
             'layers_legends': layers_legends,
@@ -285,10 +295,16 @@ def _get_info_deter(desmatamento_df):
         alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_perultimo_mes_per = ''
         alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_direcao = ''
 
-    if ultimo_mes.month == pd.notna:
-        ultimo_mes_nome = ''
+    # THIS_ONE
+    # if ultimo_mes.month == pd.notna:
+    #     ultimo_mes_nome = ''
+    # else:
+    #     ultimo_mes_nome = MES_DICT[ultimo_mes.month]
+    
+    if pd.notna(ultimo_mes) and not pd.isna(ultimo_mes):
+        ultimo_mes_nome = MES_DICT.get(ultimo_mes.month, '')
     else:
-        ultimo_mes_nome = MES_DICT[ultimo_mes.month]
+        ultimo_mes_nome = ''
 
     deter_df = pd.DataFrame({
         'ano': deter_df['data'].dt.year,   # Extraindo o ano da coluna 'data'
@@ -381,6 +397,7 @@ def _get_layers(last_month):
             df,
             lyr['value_name'],
             lyr['legend_title']))
+        
     return result
 
 
@@ -389,12 +406,12 @@ def _get_territorial_context(ufs, fpnd):
     recorte_nome = 'Amazônico'
     if not fpnd:
         if ufs and len(ufs) == 1:
-            recorte_prefixo = f'o estado {ESTADOS_DICT[ufs[0]]['prefixo']}'
+            recorte_prefixo = f"o estado {ESTADOS_DICT[ufs[0]]['prefixo']}"
             recorte_nome = ESTADOS_DICT[ufs[0]]['nome']
         if ufs and len(ufs) > 1:
             ufs.sort()
-            recorte_prefixo = f'os estados {ESTADOS_DICT[ufs[0]]['prefixo']}'
-            recorte_nome = ', '.join([ESTADOS_DICT[uf]['nome'] for uf in ufs[:-1]]) + f' e {ESTADOS_DICT[ufs[-1]]['nome']}'
+            recorte_prefixo = f"os estados {ESTADOS_DICT[ufs[0]]['prefixo']}"
+            recorte_nome = ', '.join([ESTADOS_DICT[uf]['nome'] for uf in ufs[:-1]]) + f" e {ESTADOS_DICT[ufs[-1]]['nome']}"
     else:
         recorte_prefixo = 'a FPND'
         recorte_nome = 'selecionada'

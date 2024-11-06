@@ -4,7 +4,7 @@ from fastapi import FastAPI, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 from starlette.requests import Request
-from utils import transaction
+from .utils import transaction
 from fastapi.middleware.gzip import GZipMiddleware
 
 

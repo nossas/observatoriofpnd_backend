@@ -1,0 +1,23 @@
+version: '3.8'
+
+networks:
+  default:
+    external: true
+    name: postgres_db_network
+
+services:
+  ofpnd-backend:
+    container_name: ofpnd-backend
+    image: ofpnd-backend
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: postgres_db
+      DB_PORT: 5432
+      DB_NAME: ofpnd_dev
+      STAGE: ''
+    ports:
+      - "8003:8000"
