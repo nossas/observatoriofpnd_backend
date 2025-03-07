@@ -1,4 +1,4 @@
-# Observatório das Florestas Públicas - Frontend
+# Observatório das Florestas Públicas - Backend
 
 Esse é o Backend do Observatório das Florestas Públicas é uma iniciativa do IPAM e da Amazônia de Pé para que a sociedade civil possa monitorar as Florestas Públicas Não Destinadas da Amazônia e cobrar sua proteção. Este projeto é responsável por fornecer a base de dados e APIs do Observatório.
 
