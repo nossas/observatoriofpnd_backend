@@ -1,4 +1,7 @@
+from dotenv import load_dotenv
 import os
+load_dotenv()
+
 from typing import Optional, List
 from fastapi import FastAPI, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,9 +11,12 @@ from .utils import transaction
 from fastapi.middleware.gzip import GZipMiddleware
 
 
+
+root_path = f"/{os.environ.get('STAGE', 'dev')}/"
+
 app = FastAPI(
     title="Observatório das Florestas API",
-    root_path=f"/{os.environ['STAGE']}/"
+    root_path=root_path
 )
 
 app.add_middleware(GZipMiddleware)

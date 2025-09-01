@@ -3,7 +3,7 @@ from .case_style import snake_keys_to_camel # THIS_ONE
 from .database import execute_query, sql_replace_params, execute_query_to_dataframe # THIS_ONE
 from fastapi import HTTPException
 from .layer import prepare_layer_info
-from .query import DQ_MAP_DATA_LAST_MONTH, DQ_GEO_FPND_AS_MVT, DQ_MAP_DATA, DQ_ENTENDA_INFORMACAO, DQ_ENTENDA_DESMATAMENTO, DQ_MAP_DATA_DEFORESTATION_LAST_10_YEARS, DQ_MAP_DATA_DEFORESTATION_LAST_MONTH
+from .query import DQ_MAP_DATA_LAST_MONTH, DQ_GEO_FPND_AS_MVT, DQ_MAP_DATA, DQ_ENTENDA_INFORMACAO, DQ_ENTENDA_AREA_TOTAL, DQ_ENTENDA_DESMATAMENTO, DQ_MAP_DATA_DEFORESTATION_LAST_10_YEARS, DQ_MAP_DATA_DEFORESTATION_LAST_MONTH
 import os
 import math
 import pandas as pd
@@ -33,19 +33,40 @@ ESTADOS_DICT = {
     "AC": {"nome": "Acre", "prefixo": "do"},
     "AP": {"nome": "Amapá", "prefixo": "do"},
     "AM": {"nome": "Amazonas", "prefixo": "do"},
-    "MT": {"nome": "Mato Grosso ", "prefixo": "do"},
+    "MT": {"nome": "Mato Grosso", "prefixo": "do"},
     "PA": {"nome": "Pará", "prefixo": "do"},
     "RO": {"nome": "Rondônia", "prefixo": "de"},
     "RR": {"nome": "Roraima", "prefixo": "de"},
+    "MA": {"nome": "Maranhão", "prefixo": "do"},
+    "TO": {"nome": "Tocantins", "prefixo": "do"},
 }
 
 
 def get_entenda_data(esfera=None, ufs=None, fpnd=None):
+    # Sempre gera consulta filtrada
     params = {'where_clause': _generate_where_clause(esfera, ufs, fpnd)}
-    informacao_df = execute_query_to_dataframe(PG_URI, sql_replace_params(DQ_ENTENDA_INFORMACAO, params))
-    desmatamento_df = execute_query_to_dataframe(PG_URI, sql_replace_params(DQ_ENTENDA_DESMATAMENTO, params))
+    informacao_df = execute_query_to_dataframe(
+        PG_URI, sql_replace_params(DQ_ENTENDA_INFORMACAO, params)
+    )
+    desmatamento_df = execute_query_to_dataframe(
+        PG_URI, sql_replace_params(DQ_ENTENDA_DESMATAMENTO, params)
+    )
 
-    fpnd_area_total_ha = informacao_df['fpnd_area_ha'].sum()
+    # 🔑 Denominador: depende só de UFs (não de esfera/fpnd)
+    if ufs:
+        # Mantém filtro de UFs, mas remove esfera/fpnd do where
+        params_total = {
+            "where_clause": _generate_where_clause(None, ufs, None)
+        }
+    else:
+        # Total global (sem filtro nenhum)
+        params_total = {"where_clause": ""}
+
+    total_df = execute_query_to_dataframe(
+        PG_URI, sql_replace_params(DQ_ENTENDA_INFORMACAO, params_total)
+    )
+    fpnd_area_total_ha = total_df['fpnd_area_ha'].sum()
+
     if fpnd_area_total_ha == 0:
         return _get_empty_result(ufs, fpnd)
 
@@ -54,7 +75,7 @@ def get_entenda_data(esfera=None, ufs=None, fpnd=None):
         **_get_entenda_s_car(informacao_df, fpnd_area_total_ha),
         **_get_entenda_s_carbono(informacao_df),
         **_get_entenda_s_categoria(informacao_df, fpnd_area_total_ha),
-        **_get_entenda_s_desmatamento(informacao_df),
+        **_get_entenda_s_desmatamento(informacao_df, esfera),
         **_get_entenda_s_entenda(informacao_df, fpnd_area_total_ha),
         **_get_entenda_s_mineracao(informacao_df),
         **_get_info_deter(desmatamento_df),
@@ -63,6 +84,7 @@ def get_entenda_data(esfera=None, ufs=None, fpnd=None):
     }
 
     return snake_keys_to_camel(_replace_nans_with_zeros(result))
+
 
 
 def get_fpnd_as_mvt(z, x, y):
@@ -88,7 +110,7 @@ def get_map_data():
             layers_data.append(lyr['data'])
         data = pd.concat(layers_data, axis=1, ignore_index=False)
         
-        # THIS_ONE
+        # THIS_ONEa
         # Para colunas categóricas, adicionar 0 como categoria, se necessário
         for col in data.select_dtypes(['category']).columns:
             if 0 not in data[col].cat.categories:
@@ -169,9 +191,11 @@ def _get_deforestation_last_ten_years():
 def _get_entenda_s_biodiversidade(informacao_df, esfera):
     return {
         # Média da diversidade de espécies nas FPND categorizadas como "Federal" e arredondando o resultado para duas casas decimais
-        'biodiversidade_fpnd_federal_media': round(informacao_df[informacao_df['esfera'] == 'Federal']['especie_diversidade_media'].mean(), 2) if esfera in [None, 'Federal'] else 0,
+        'biodiversidade_fpnd_federal_media': round(informacao_df[informacao_df['esfera'] == 'Federal']['especie_diversidade_media'].mean(), 0) if esfera in [None, 'Federal'] else 0,
         # Média da diversidade de espécies nas FPND categorizadas como "Federal" e arredondando o resultado para duas casas decimais
-        'biodiversidade_fpnd_todas_media': round(informacao_df['especie_diversidade_media'].mean(), 2)
+        'biodiversidade_fpnd_todas_media': round(informacao_df['especie_diversidade_media'].mean(), 0),
+        
+        'biodiversidade_fpnd_estadual_media':  round(informacao_df[informacao_df['esfera'] == 'Estadual']['especie_diversidade_media'].mean(), 0) if esfera in [None, 'Estadual'] else 0
     }
 
 
@@ -215,6 +239,7 @@ def _get_entenda_s_carbono(informacao_df):
 
 
 def _get_entenda_s_categoria(informacao_df, fpnd_area_total_ha):
+    
     return {
         # Calculando a área total das FPND categorizadas como "Estadual" e arredondando o resultado para duas casas decimais
         'categoria_fpnd_estadual_area_per': str(round((informacao_df[informacao_df['esfera'] == 'Estadual']['fpnd_area_ha'].sum() / fpnd_area_total_ha) * 100, 2)),
@@ -223,7 +248,7 @@ def _get_entenda_s_categoria(informacao_df, fpnd_area_total_ha):
     }
 
 
-def _get_entenda_s_desmatamento(informacao_df):
+def _get_entenda_s_desmatamento(informacao_df, esfera):
     result = {}
 
     # Área de desmatamento Total nas FPNDs
@@ -232,17 +257,46 @@ def _get_entenda_s_desmatamento(informacao_df):
     # Área de florestas nativas nas FPNDs
     result['desmatamento_floresta_nativa_ha'] = round(informacao_df['floresta_atual_area_ha'].sum(), 2)
     # Gráfico
-
-    floresta = informacao_df[informacao_df['esfera'] == 'Estadual']['floresta_atual_area_ha'].sum()
-    desmatamento = informacao_df[informacao_df['esfera'] == 'Estadual']['desmatamento_area_ha'].sum()
-    total = floresta + desmatamento
-    if total == 0:
-        result['desmatamento_grafico_fpnd_estaduais'] = None
+    
+    if esfera:
+        floresta = informacao_df[informacao_df['esfera'] == esfera]['floresta_atual_area_ha'].sum()
+        desmatamento = informacao_df[informacao_df['esfera'] == esfera]['desmatamento_area_ha'].sum()
+        total = floresta + desmatamento
+        
+        if total == 0:
+            result['desmatamento_grafico_fpnd'] = None
+        else:
+            result['desmatamento_grafico_fpnd'] = [
+                {'colorField': 'Floresta', 'angleField': round((floresta / total) * 100, 1)},
+                {'colorField': 'Desmatamento', 'angleField': round((desmatamento / total) * 100, 1)}
+            ]
     else:
-        result['desmatamento_grafico_fpnd_estaduais'] = [
-            {'colorField': 'Floresta', 'angleField': round((floresta / total) * 100, 1)},
-            {'colorField': 'Desmatamento', 'angleField': round((desmatamento / total) * 100, 1)}
-        ]
+        floresta = informacao_df['floresta_atual_area_ha'].sum()
+        desmatamento = informacao_df['desmatamento_area_ha'].sum()
+        total = floresta + desmatamento
+        
+        if total == 0:
+            result['desmatamento_grafico_fpnd'] = None
+        else:
+            result['desmatamento_grafico_fpnd'] = [
+                {'colorField': 'Floresta', 'angleField': round((floresta / total) * 100, 1)},
+                {'colorField': 'Desmatamento', 'angleField': round((desmatamento / total) * 100, 1)}
+            ]
+    
+    # floresta = informacao_df[informacao_df['esfera'] == esfera]['floresta_atual_area_ha'].sum()
+    # desmatamento = informacao_df[informacao_df['esfera'] == esfera]['desmatamento_area_ha'].sum()
+    # total = floresta + desmatamento
+    
+    
+    
+    # if total == 0:
+    #     result['desmatamento_grafico_fpnd_estaduais'] = None
+    # else:
+    #     result['desmatamento_grafico_fpnd_estaduais'] = [
+    #         {'colorField': 'Floresta', 'angleField': round((floresta / total) * 100, 1)},
+    #         {'colorField': 'Desmatamento', 'angleField': round((desmatamento / total) * 100, 1)}
+    #     ]
+    print(result['desmatamento_grafico_fpnd'])
     return result
 
 
@@ -287,13 +341,14 @@ def _get_info_deter(desmatamento_df):
 
     # Calculando a diferença percentual
     if area_ano_anterior > 0:
-        value = round(abs(((alerta_mensal_desmatamento_ultimo_mes_ha - area_ano_anterior) / area_ano_anterior) * 100), 2)
-        alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_perultimo_mes_per = \
-            str(value)
-        alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_direcao = 'maior' if value < 0 else 'menor'
+        diff = ((alerta_mensal_desmatamento_ultimo_mes_ha - area_ano_anterior) / area_ano_anterior) * 100
+        value = round(abs(diff), 2)
+        alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_perultimo_mes_per = str(value)
+        alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_direcao = 'maior' if diff > 0 else 'menor'
     else:
         alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_perultimo_mes_per = ''
         alerta_mensal_desmatamento_comparacao_mesmo_mes_ano_anterio_direcao = ''
+
 
     # THIS_ONE
     # if ultimo_mes.month == pd.notna:
@@ -341,8 +396,9 @@ def _get_info_prodes(desmatamento_df):
     prodes_df = desmatamento_df[desmatamento_df['fonte'] == 'prodes'].reset_index()
 
     # Encontrando o primeiro e o último ano disponível no DataFrame para dados 'PRODES'
-    primeiro_ano = prodes_df['data'].dt.to_period('Y').min()
     ultimo_ano = prodes_df['data'].dt.to_period('Y').max()
+    primeiro_ano = ultimo_ano - 4
+    # primeiro_ano = prodes_df['data'].dt.to_period('Y').min()
 
     dados_primeiro_ano = prodes_df[prodes_df['data'].dt.to_period('Y') == primeiro_ano]
     dados_ultimo_ano = prodes_df[prodes_df['data'].dt.to_period('Y') == ultimo_ano]
