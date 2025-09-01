@@ -86,6 +86,13 @@ DQ_ENTENDA_INFORMACAO = """
     ${where_clause};
 """
 
+DQ_ENTENDA_AREA_TOTAL = """
+    SELECT
+        fpnd_area_ha
+    FROM
+        ofpnd.informacao;
+"""
+
 DQ_ENTENDA_DESMATAMENTO = """
     select
         d.codigo,

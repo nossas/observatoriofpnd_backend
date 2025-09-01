@@ -33,6 +33,16 @@
                 "angleField": 0
             }
         ],
+        "desmatamento_grafico_fpnd_federais": [
+            {
+                "colorField": "Floresta",
+                "angleField": 0
+            },
+            {
+                "colorField": "Desmatamento",
+                "angleField": 0
+            }
+        ],
         "entenda_fpnd_area_total_ha": 0,
         "entenda_fpnd_equivalencia_futebol_qtd": 0,
         "mineracao_sobreposicao_fpnd_area_ha": 0,
